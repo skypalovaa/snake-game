@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ocean Snake</title>
+<title>Fishing in Lofoten</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { overflow: hidden; background: #0a1628; font-family: 'Segoe UI', Tahoma, sans-serif; }
@@ -30,7 +30,7 @@ canvas { display: block; }
 </head>
 <body>
 <div id="title-screen">
-    <h1>Ocean Snake</h1>
+    <h1>Fishing in Lofoten</h1>
     <p>Follow the cursor &bull; Eat the food &bull; Dodge the orcas</p>
     <button id="play-btn">Play</button>
 </div>
@@ -277,7 +277,13 @@ function draw() {
         ctx.lineTo(last.x, last.y);
         ctx.lineTo(last.x, m.baseY + 60);
         ctx.closePath();
-        ctx.fillStyle = m.color;
+        // 3D gradient: lighter at peaks, darker at base
+        const minPeakY = Math.min(...m.pts.map(p => p.y));
+        const mtnGrad = ctx.createLinearGradient(0, minPeakY, 0, m.baseY + 60);
+        mtnGrad.addColorStop(0, m.color);
+        mtnGrad.addColorStop(0.3, m.color);
+        mtnGrad.addColorStop(1, darkenColor(m.color, 0.4));
+        ctx.fillStyle = mtnGrad;
         ctx.fill();
 
         // Snow caps (only for layers that have a snowLine)
@@ -298,8 +304,12 @@ function draw() {
             ctx.lineTo(last.x, m.baseY + 60);
             ctx.closePath();
             ctx.clip();
-            // Draw snow rectangle clipped to peaks
-            ctx.fillStyle = 'rgba(220,230,245,0.25)';
+            // Draw snow with sunlit highlight gradient
+            const snowGrad = ctx.createLinearGradient(0, minPeakY - 20, 0, snowThreshold);
+            snowGrad.addColorStop(0, 'rgba(240,245,255,0.4)');
+            snowGrad.addColorStop(0.5, 'rgba(220,230,245,0.25)');
+            snowGrad.addColorStop(1, 'rgba(200,215,235,0.1)');
+            ctx.fillStyle = snowGrad;
             ctx.fillRect(-200, 0, W + 400, snowThreshold);
             ctx.restore();
         }
@@ -340,11 +350,12 @@ function draw() {
 
 function drawWaves() {
     const layers = [
-        { y: H * 0.45, amp: 12, freq: 0.012, speed: 1, alpha: 0.15, color: '#4a90d9' },
-        { y: H * 0.52, amp: 8, freq: 0.018, speed: 1.5, alpha: 0.1, color: '#3d7ec0' },
-        { y: H * 0.58, amp: 6, freq: 0.025, speed: 2, alpha: 0.08, color: '#2d6aa0' },
+        { y: H * 0.45, amp: 12, freq: 0.012, speed: 1, alpha: 0.15, color: '#4a90d9', darkColor: '#2a5a8a' },
+        { y: H * 0.52, amp: 8, freq: 0.018, speed: 1.5, alpha: 0.1, color: '#3d7ec0', darkColor: '#1e4a7a' },
+        { y: H * 0.58, amp: 6, freq: 0.025, speed: 2, alpha: 0.08, color: '#2d6aa0', darkColor: '#153a60' },
     ];
     for (const l of layers) {
+        // Main wave fill with depth gradient
         ctx.beginPath();
         ctx.moveTo(0, H);
         for (let x = 0; x <= W; x += 4) {
@@ -354,10 +365,29 @@ function drawWaves() {
         }
         ctx.lineTo(W, H);
         ctx.closePath();
-        ctx.fillStyle = l.color;
+        const waveGrad = ctx.createLinearGradient(0, l.y - l.amp, 0, l.y + l.amp + (H - l.y) * 0.5);
+        waveGrad.addColorStop(0, l.color);
+        waveGrad.addColorStop(0.4, l.darkColor);
+        waveGrad.addColorStop(1, l.darkColor);
+        ctx.fillStyle = waveGrad;
         ctx.globalAlpha = l.alpha;
         ctx.fill();
         ctx.globalAlpha = 1;
+
+        // Specular highlights on wave crests
+        ctx.save();
+        ctx.globalAlpha = l.alpha * 0.6;
+        ctx.beginPath();
+        for (let x = 0; x <= W; x += 4) {
+            const y = l.y + Math.sin(x * l.freq + waveOffset * l.speed) * l.amp
+                          + Math.sin(x * l.freq * 0.5 + waveOffset * l.speed * 0.7) * l.amp * 0.5;
+            if (x === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = 'rgba(180,220,255,0.5)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.restore();
     }
 }
 
@@ -368,9 +398,17 @@ function drawSnakeBody() {
         const t = i / Math.max(segments.length, 1);
         const size = BODY_SIZE * (0.6 + 0.4 * (1 - t));
         const hue = 120 + t * 40;
+        const sr = size / 2;
         ctx.beginPath();
-        ctx.arc(seg.x, seg.y, size / 2, 0, Math.PI * 2);
+        ctx.arc(seg.x, seg.y, sr, 0, Math.PI * 2);
         ctx.fillStyle = `hsl(${hue}, 50%, 35%)`;
+        ctx.fill();
+        // 3D gradient shading
+        const bodyGrad = ctx.createRadialGradient(seg.x - sr * 0.35, seg.y - sr * 0.35, sr * 0.1, seg.x, seg.y, sr);
+        bodyGrad.addColorStop(0, 'rgba(255,255,255,0.3)');
+        bodyGrad.addColorStop(0.5, 'rgba(255,255,255,0)');
+        bodyGrad.addColorStop(1, 'rgba(0,0,0,0.35)');
+        ctx.fillStyle = bodyGrad;
         ctx.fill();
         ctx.lineWidth = 3;
         ctx.strokeStyle = `hsl(${hue}, 60%, 45%)`;
@@ -416,6 +454,15 @@ function drawCircleImage(img, x, y, size, borderColor, borderWidth) {
         ctx.fillStyle = '#888';
         ctx.fillRect(x - size / 2, y - size / 2, size, size);
     }
+    // 3D sphere overlay — subtle so faces stay visible
+    const r = size / 2;
+    const sphereGrad = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, r * 0.1, x, y, r);
+    sphereGrad.addColorStop(0, 'rgba(255,255,255,0.25)');
+    sphereGrad.addColorStop(0.5, 'rgba(255,255,255,0)');
+    sphereGrad.addColorStop(0.85, 'rgba(0,0,0,0)');
+    sphereGrad.addColorStop(1, 'rgba(0,0,0,0.3)');
+    ctx.fillStyle = sphereGrad;
+    ctx.fill();
     ctx.restore();
 }
 
@@ -495,10 +542,31 @@ function drawOrca(o) {
     ctx.fill();
     ctx.restore();
 
+    // Shadow beneath orca
+    ctx.save();
+    ctx.globalAlpha = 0.2;
+    ctx.beginPath();
+    ctx.ellipse(2, 20, 38, 8, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#000';
+    ctx.fill();
+    ctx.restore();
+
     // Body
     ctx.beginPath();
     ctx.ellipse(0, 0, 40, 17, 0, 0, Math.PI * 2);
     ctx.fillStyle = '#1a1a2e';
+    ctx.fill();
+    // 3D gradient shading on body
+    const orcaGrad = ctx.createLinearGradient(0, -17, 0, 17);
+    orcaGrad.addColorStop(0, 'rgba(80,80,120,0.35)');
+    orcaGrad.addColorStop(0.4, 'rgba(0,0,0,0)');
+    orcaGrad.addColorStop(1, 'rgba(0,0,0,0.4)');
+    ctx.fillStyle = orcaGrad;
+    ctx.fill();
+    // Specular highlight
+    ctx.beginPath();
+    ctx.ellipse(-5, -10, 18, 5, -0.2, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
     ctx.fill();
 
     // Belly
@@ -563,6 +631,14 @@ function drawGameOver() {
 }
 
 // ── UTIL ──
+function darkenColor(hslStr, amount) {
+    // Parse hsl(h, s%, l%) and darken by amount (0-1)
+    const m = hslStr.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+    if (!m) return hslStr;
+    const l = Math.max(0, parseInt(m[3]) * (1 - amount));
+    return `hsl(${m[1]}, ${m[2]}%, ${Math.round(l)}%)`;
+}
+
 function lerpAngle(a, b, t) {
     let diff = b - a;
     while (diff > Math.PI) diff -= Math.PI * 2;
